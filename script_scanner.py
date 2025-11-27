@@ -232,7 +232,7 @@ async def process_json_request( ctx ):
             else:
                 reply_body = f"{script_name}\n"
         reply_body += f"```json\n{ json }\n```\n"
-        reply_body += f"https://script.bloodontheclocktower.com?script={ compress_json( json ) }"
+        reply_body += f"<https://script.bloodontheclocktower.com?script={ compress_json( json ) }>"
         await ctx.reply( reply_body )
     except Exception:
         await ctx.reply( "Something went wrong." )
