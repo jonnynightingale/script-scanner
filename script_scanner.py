@@ -231,9 +231,12 @@ async def process_json_request( ctx ):
                 reply_body = f"{script_name} by {author}\n"
             else:
                 reply_body = f"{script_name}\n"
-        reply_body += f"```json\n{ json }\n```\n"
-        reply_body += f"<https://script.bloodontheclocktower.com?script={ compress_json( json ) }>"
-        await ctx.reply( reply_body )
+        reply_body += f"```json\n{ json }\n```"
+        url = f"https://script.bloodontheclocktower.com?script={ compress_json( json ) }"
+        embed = discord.Embed(
+            description=f"[Open in Script Tool]({ url })"
+        )
+        await ctx.reply( reply_body, embed=embed )
     except Exception:
         await ctx.reply( "Something went wrong." )
         return
