@@ -1,6 +1,8 @@
+import base64
 import cv2
 import discord
 from discord.ext import commands
+import gzip
 from io import BytesIO
 import Levenshtein
 import numpy
@@ -8,6 +10,7 @@ import os
 import pytesseract
 import requests
 import sys
+from urllib.parse import quote
 
 A4_HEIGHT_PIXELS = 2970
 A4_WIDTH_PIXELS = 2100
@@ -201,6 +204,11 @@ async def get_referenced_image_or_parent( ctx ):
         if ( image := get_referenced_image ( parent_message ) ) is not None:
             return image
 
+def compress_json( json_string ):
+    compressed = gzip.compress( json_string.encode( "utf-8" ) )
+    base64_encoded = base64.b64encode( compressed ).decode( "utf-8" )
+    return quote( base64_encoded )
+
 async def process_json_request( ctx ):
     attached_image = await get_referenced_image_or_parent( ctx )
 
@@ -223,7 +231,8 @@ async def process_json_request( ctx ):
                 reply_body = f"{script_name} by {author}\n"
             else:
                 reply_body = f"{script_name}\n"
-        reply_body += f"```json\n{ json }\n```"
+        reply_body += f"```json\n{ json }\n```\n"
+        reply_body += f"https://script.bloodontheclocktower.com?script={ compress_json( json ) }"
         await ctx.reply( reply_body )
     except Exception:
         await ctx.reply( "Something went wrong." )
