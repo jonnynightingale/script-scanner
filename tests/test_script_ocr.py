@@ -7,7 +7,7 @@ import pytest
 from script_ocr import load_character_mapping, script_image_to_json
 
 # Load the character mapping once before any tests run.
-character_mapping = load_character_mapping()
+character_mapping = load_character_mapping(Path(__file__).parent.parent / "characters.tsv")
 
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 
