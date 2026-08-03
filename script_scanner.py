@@ -79,7 +79,7 @@ def map_scanned_character_names_to_json_equivalent( names ):
         json_character = character_mapping.get( name )
 
         # If we found an exact match, we are done
-        if json_character != None:
+        if json_character is not None:
             json_characters.append( json_character )
             continue
 
@@ -155,23 +155,23 @@ def extract_script_meta_data( script_image ):
 def combine_to_json_string( characters, script_name, author ):
     """Given all the script data, convert it into the standard JSON format"""
     
-    json = f'[{{"id":"_meta","author":"{author}","name":"{script_name}"}}'
+    script_json = f'[{{"id":"_meta","author":"{author}","name":"{script_name}"}}'
     for name in characters:
-        json += f',"{name}"'
-    json +=']'
+        script_json += f',"{name}"'
+    script_json +=']'
 
     # Remove and line breaks or carriage returns
-    json = json.replace( "\n", "" ).replace( "\r", "" )
+    script_json = script_json.replace( "\n", "" ).replace( "\r", "" )
 
-    return json
+    return script_json
 
 def script_image_to_json( input_image ):
     """Given an image of a script, convert it into the standard JSON format"""
     processed_script_image = normalize_height( input_image, A4_HEIGHT_PIXELS )
     character_names = extract_character_names( processed_script_image )
     ( script_name, author ) = extract_script_meta_data( processed_script_image )
-    json = combine_to_json_string( character_names, script_name, author )
-    return ( script_name, author, json )
+    script_json = combine_to_json_string( character_names, script_name, author )
+    return ( script_name, author, script_json )
 
 def bytesio_to_cv2_image( bytesio ):
     image_bytes = bytesio.read()
@@ -186,8 +186,10 @@ def compress_json( json_string ):
 async def process_json_request(interaction: discord.Interaction,
                                attached_image: discord.Attachment):
 
+    await interaction.response.defer()
+
     if attached_image.content_type is None or not attached_image.content_type.startswith("image/"):
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Please upload an image.",
             ephemeral=True
         )
@@ -196,14 +198,14 @@ async def process_json_request(interaction: discord.Interaction,
     try:
         image = bytesio_to_cv2_image(BytesIO(await attached_image.read()))
     except Exception:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Something went wrong.",
             ephemeral=True
         )
         return
 
     try:
-        (script_name, author, json) = script_image_to_json(image)
+        (script_name, author, script_json) = script_image_to_json(image)
 
         reply_body = ""
         if script_name:
@@ -212,21 +214,21 @@ async def process_json_request(interaction: discord.Interaction,
                 reply_body += f" by {author}"
             reply_body += "\n"
 
-        reply_body += f"```json\n{json}\n```"
+        reply_body += f"```json\n{script_json}\n```"
 
-        url = f"https://script.bloodontheclocktower.com?script={compress_json(json)}"
+        url = f"https://script.bloodontheclocktower.com?script={compress_json(script_json)}"
 
         embed = discord.Embed(
             description=f"[Open in Script Tool]({url})"
         )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             reply_body,
             embed=embed
         )
 
     except Exception:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Something went wrong.",
             ephemeral=True
         )
@@ -243,9 +245,16 @@ if __name__ == "__main__":
     client = discord.Client(intents=intents)
     tree = discord.app_commands.CommandTree(client)
 
+    synced = False
+
     @client.event
     async def on_ready():
-        await tree.sync()
+        global synced
+
+        if not synced:
+            await tree.sync()
+            synced = True
+
         print(f"Logged in as {client.user}")
     
     @tree.command(name="json", description="Convert a script image to JSON")
