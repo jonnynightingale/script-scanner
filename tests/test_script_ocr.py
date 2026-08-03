@@ -26,7 +26,7 @@ def test_script_image_to_json(image_file, expected_file):
     image = cv2.imread(str(image_path))
     assert image is not None, f"Failed to load image: {image_path}"
 
-    _, _, actual_json = script_image_to_json(image)
+    _, _, actual_json = script_image_to_json(character_mapping, image)
 
     with expected_path.open("r", encoding="utf-8") as f:
         expected_json = json.load(f)
