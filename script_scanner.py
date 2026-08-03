@@ -1,14 +1,12 @@
 import base64
 import cv2
 import discord
-from discord.ext import commands
 import gzip
 from io import BytesIO
 import Levenshtein
 import numpy
 import os
 import pytesseract
-import requests
 import sys
 from urllib.parse import quote
 
@@ -180,67 +178,58 @@ def bytesio_to_cv2_image( bytesio ):
     np_array = numpy.frombuffer( image_bytes, numpy.uint8 )
     return cv2.imdecode( np_array, cv2.IMREAD_COLOR )
 
-def get_referenced_image( message ):
-    """Given a Discord message context, return the first image attached to it."""
-
-    if message.attachments:
-        attachment = message.attachments[ 0 ]
-        if attachment.content_type.startswith( "image/" ):
-            return attachment
-
-async def get_referenced_image_or_parent( ctx ):
-    """
-    Given a Discord message context, return the image attachment of either that image or, if it
-    does not have one, the image attached to the message it is replying to.
-    """
-
-    # Return the image attached to this message
-    if ( image := get_referenced_image ( ctx.message ) ) is not None:
-        return image
-
-    # Or return the image attached to the parent message
-    if ctx.message.reference:
-        parent_message = await ctx.channel.fetch_message( ctx.message.reference.message_id )
-        if ( image := get_referenced_image ( parent_message ) ) is not None:
-            return image
-
 def compress_json( json_string ):
     compressed = gzip.compress( json_string.encode( "utf-8" ) )
     base64_encoded = base64.b64encode( compressed ).decode( "utf-8" )
     return quote( base64_encoded )
 
-async def process_json_request( ctx ):
-    attached_image = await get_referenced_image_or_parent( ctx )
+async def process_json_request(interaction: discord.Interaction,
+                               attached_image: discord.Attachment):
 
-    if attached_image is None:
-        await ctx.reply( "Please attach a script image." )
-        return
-
-    try:
-        response = requests.get( attached_image.url )
-        image = bytesio_to_cv2_image( BytesIO( response.content ) )
-    except Exception:
-        await ctx.reply( "Something went wrong." )
-        return
-
-    try:
-        ( script_name, author, json ) = script_image_to_json( image )
-        reply_body = ""
-        if len( script_name ) > 0:
-            if len( author ) > 0:
-                reply_body = f"{script_name} by {author}\n"
-            else:
-                reply_body = f"{script_name}\n"
-        reply_body += f"```json\n{ json }\n```"
-        url = f"https://script.bloodontheclocktower.com?script={ compress_json( json ) }"
-        embed = discord.Embed(
-            description=f"[Open in Script Tool]({ url })"
+    if attached_image.content_type is None or not attached_image.content_type.startswith("image/"):
+        await interaction.response.send_message(
+            "Please upload an image.",
+            ephemeral=True
         )
-        await ctx.reply( reply_body, embed=embed )
-    except Exception:
-        await ctx.reply( "Something went wrong." )
         return
 
+    try:
+        image = bytesio_to_cv2_image(BytesIO(await attached_image.read()))
+    except Exception:
+        await interaction.response.send_message(
+            "Something went wrong.",
+            ephemeral=True
+        )
+        return
+
+    try:
+        (script_name, author, json) = script_image_to_json(image)
+
+        reply_body = ""
+        if script_name:
+            reply_body = script_name
+            if author:
+                reply_body += f" by {author}"
+            reply_body += "\n"
+
+        reply_body += f"```json\n{json}\n```"
+
+        url = f"https://script.bloodontheclocktower.com?script={compress_json(json)}"
+
+        embed = discord.Embed(
+            description=f"[Open in Script Tool]({url})"
+        )
+
+        await interaction.response.send_message(
+            reply_body,
+            embed=embed
+        )
+
+    except Exception:
+        await interaction.response.send_message(
+            "Something went wrong.",
+            ephemeral=True
+        )
 
 if __name__ == "__main__":
     try:
@@ -250,12 +239,20 @@ if __name__ == "__main__":
         sys.exit(1)
 
     intents = discord.Intents.default()
-    intents.messages = True
-    intents.message_content = True
-    bot = commands.Bot( command_prefix='!', intents = intents )
 
-    @bot.command()
-    async def json( ctx ):
-        await process_json_request( ctx )
+    client = discord.Client(intents=intents)
+    tree = discord.app_commands.CommandTree(client)
 
-    bot.run( os.environ[ 'JSON_BOT_TOKEN' ] )
+    @client.event
+    async def on_ready():
+        await tree.sync()
+        print(f"Logged in as {client.user}")
+    
+    @tree.command(name="json", description="Convert a script image to JSON")
+    async def json_command(
+        interaction: discord.Interaction,
+        image: discord.Attachment
+    ):
+        await process_json_request(interaction, image)
+
+    client.run( os.environ[ 'JSON_BOT_TOKEN' ] )
